@@ -14,6 +14,12 @@ import dashboard
 
 risk = RiskManager(config.RISK, config.START_BALANCE)
 broker = PaperBroker()
+# pulihkan state lintas-run (wajib untuk mode --once / GitHub Actions)
+_bal = config.START_BALANCE + broker.closed_pnl_total()
+_peak = broker.get_meta("peak_balance")
+risk.restore(_bal,
+             float(_peak) if _peak else max(config.START_BALANCE, _bal),
+             broker.day_pnl_today(), len(broker.positions))
 ml = MLFilter()
 council = Council()
 equity = [config.START_BALANCE]
@@ -62,7 +68,8 @@ def cycle():
         # 1) kelola posisi terbuka
         for pnl, reason, pos in broker.update(sym, bar.to_dict(), ts):
             risk.on_trade_close(pnl)
-            send(trade_closed(pnl, reason, pos))
+            broker.set_meta("peak_balance", risk.state.peak_balance)
+            send(trade_closed(pnl, reason, pos, risk.state.balance))
         # 2) sidang dewan: 7 peran voting untuk entry baru
         if any(p.symbol == sym for p in broker.positions):
             continue
@@ -74,7 +81,10 @@ def cycle():
         size = risk.position_size(sig.entry, sig.stop)
         if size <= 0:
             continue
-        pos = broker.open(sig, size, config.SPREAD[sym], ts)
+        pos = broker.open(sig, size, config.SPREAD[sym], ts,
+                          balance_before=risk.state.balance,
+                          council_reason=reason,
+                          council_votes=Council.format_votes(votes))
         pos.features = sig.features
         risk.on_trade_open()
         send(trade_opened(pos) + f"\n\n🗳️ Keputusan dewan: {reason}\n"

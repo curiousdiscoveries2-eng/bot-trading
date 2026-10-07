@@ -52,6 +52,14 @@ class RiskManager:
     def new_day(self):
         self.state.day_pnl = 0.0
 
+    def restore(self, balance: float, peak_balance: float, day_pnl: float, open_count: int):
+        """Pulihkan state lintas-run (mode --once / GitHub Actions)."""
+        s = self.state
+        s.balance = balance
+        s.peak_balance = max(peak_balance, balance)
+        s.day_pnl = day_pnl
+        s.open_count = open_count
+
     def drawdown(self) -> float:
         s = self.state
         return (s.peak_balance - s.balance) / s.peak_balance if s.peak_balance else 0.0

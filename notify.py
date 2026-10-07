@@ -22,13 +22,28 @@ def trade_opened(pos) -> str:
     d = "LONG" if pos.direction == 1 else "SHORT"
     return (f"🟢 OPEN {d} {pos.symbol}\n"
             f"Entry: {pos.entry:.5f} | SL: {pos.stop:.5f} | TP: {pos.tp:.5f}\n"
-            f"Size: {pos.size:,.0f} unit | Strategi: {pos.strategy}")
+            f"Size: {pos.size:,.0f} unit | Strategi: {pos.strategy}\n"
+            f"💰 Saldo saat open: ${pos.balance_before:,.2f}")
 
 
-def trade_closed(pnl: float, reason: str, pos) -> str:
-    emo = "✅" if pnl > 0 else "❌"
-    return (f"{emo} CLOSE {pos.symbol} ({reason})\n"
-            f"P/L: ${pnl:,.2f}")
+def trade_closed(pnl: float, close_reason: str, pos, balance_after: float) -> str:
+    d = "LONG" if pos.direction == 1 else "SHORT"
+    hasil = "✅ WIN" if pnl > 0 else "❌ LOSS"
+    reason_id = {"take_profit": "take profit 🎯",
+                 "stop_loss": "stop loss 🛑",
+                 "emergency": "emergency stop 🛑"}.get(close_reason, close_reason)
+    risk_amt = abs(pos.entry - pos.stop) * pos.size
+    rmult = pnl / risk_amt if risk_amt > 0 else 0.0
+    votes = f"\n{pos.council_votes}" if pos.council_votes else ""
+    return (f"{hasil} — CLOSE {d} {pos.symbol}\n"
+            f"Alasan: {reason_id}\n\n"
+            f"💰 P/L: ${pnl:+,.2f} ({rmult:+.1f}R)\n"
+            f"📊 Saldo: ${pos.balance_before:,.2f} → ${balance_after:,.2f}\n\n"
+            f"🎯 Kenapa posisi ini dibuka:\n"
+            f"• Strategi: {pos.strategy} | Dewan: {pos.council_reason}"
+            f"{votes}\n\n"
+            f"Entry {pos.entry:.5f} | SL {pos.stop:.5f} | TP {pos.tp:.5f}\n"
+            f"Dibuka: {pos.open_time}")
 
 
 class CommandListener(threading.Thread):

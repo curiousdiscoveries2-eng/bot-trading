@@ -15,6 +15,9 @@ class Position:
     size: float
     strategy: str
     open_time: str
+    balance_before: float = 0.0   # saldo saat posisi dibuka
+    council_reason: str = ""       # ringkasan keputusan dewan
+    council_votes: str = ""        # rincian voting (teks)
 
 
 class PaperBroker:
@@ -23,6 +26,7 @@ class PaperBroker:
         self.positions: list[Position] = []
         self._next_id = 1
         self._init_db()
+        self._load_open()   # pulihkan posisi lintas-run (mode --once)
 
     def _init_db(self):
         with sqlite3.connect(self.db_path) as c:
@@ -33,14 +37,41 @@ class PaperBroker:
                 pnl REAL, reason TEXT,
                 f_rsi REAL, f_adx REAL, f_atr_ratio REAL, f_bb_pos REAL,
                 f_ema_dist REAL, f_hour INTEGER)""")
+            # posisi yang masih terbuka — bertahan antar-run
+            c.execute("""CREATE TABLE IF NOT EXISTS open_positions(
+                id INTEGER PRIMARY KEY, symbol TEXT, direction INTEGER,
+                entry REAL, stop REAL, tp REAL, size REAL,
+                strategy TEXT, open_time TEXT,
+                balance_before REAL, council_reason TEXT, council_votes TEXT)""")
+            # state kecil bot (peak balance utk drawdown lintas-run)
+            c.execute("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT)")
 
-    def open(self, sig, size: float, spread: float, open_time: str) -> Position:
+    def _load_open(self):
+        with sqlite3.connect(self.db_path) as c:
+            rows = c.execute("""SELECT id,symbol,direction,entry,stop,tp,size,
+                strategy,open_time,balance_before,council_reason,council_votes
+                FROM open_positions""").fetchall()
+        for r in rows:
+            self.positions.append(Position(*r))
+            self._next_id = max(self._next_id, r[0] + 1)
+
+    def open(self, sig, size: float, spread: float, open_time: str,
+             balance_before: float = 0.0, council_reason: str = "",
+             council_votes: str = "") -> Position:
         # bayar spread saat entry (simulasi realistis)
         entry = sig.entry + sig.direction * spread / 2
         pos = Position(self._next_id, sig.symbol, sig.direction, entry,
-                       sig.stop, sig.take_profit, size, sig.strategy, open_time)
+                       sig.stop, sig.take_profit, size, sig.strategy, open_time,
+                       balance_before, council_reason, council_votes)
         self._next_id += 1
         self.positions.append(pos)
+        with sqlite3.connect(self.db_path) as c:
+            c.execute("""INSERT INTO open_positions(id,symbol,direction,entry,stop,tp,
+                size,strategy,open_time,balance_before,council_reason,council_votes)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (pos.id, pos.symbol, pos.direction, pos.entry, pos.stop, pos.tp,
+                 pos.size, pos.strategy, pos.open_time, balance_before,
+                 council_reason, council_votes))
         return pos
 
     def _close(self, pos: Position, exit_price: float, close_time: str, reason: str) -> float:
@@ -48,6 +79,7 @@ class PaperBroker:
         pnl = (exit_price - pos.entry) * pos.direction * pos.size
         f = getattr(pos, "features", {}) or {}
         with sqlite3.connect(self.db_path) as c:
+            c.execute("DELETE FROM open_positions WHERE id=?", (pos.id,))
             c.execute("""INSERT INTO trades(symbol,direction,entry,exit,stop,tp,size,
                 strategy,regime,open_time,close_time,pnl,reason,
                 f_rsi,f_adx,f_atr_ratio,f_bb_pos,f_ema_dist,f_hour)
@@ -98,3 +130,29 @@ class PaperBroker:
             "avg_win": sum(wins) / len(wins) if wins else 0,
             "avg_loss": sum(p for p in pnls if p <= 0) / max(1, len(pnls) - len(wins)),
         }
+
+    # ---- helper lintas-run ----
+    def closed_pnl_total(self) -> float:
+        with sqlite3.connect(self.db_path) as c:
+            row = c.execute("SELECT COALESCE(SUM(pnl),0) FROM trades").fetchone()
+        return float(row[0])
+
+    def day_pnl_today(self) -> float:
+        import datetime
+        today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+        with sqlite3.connect(self.db_path) as c:
+            row = c.execute(
+                "SELECT COALESCE(SUM(pnl),0) FROM trades WHERE substr(close_time,1,10)=?",
+                (today,)).fetchone()
+        return float(row[0])
+
+    def get_meta(self, key: str, default=None):
+        with sqlite3.connect(self.db_path) as c:
+            row = c.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return row[0] if row else default
+
+    def set_meta(self, key: str, value):
+        with sqlite3.connect(self.db_path) as c:
+            c.execute("INSERT INTO meta(key,value) VALUES(?,?) "
+                      "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                      (key, str(value)))
