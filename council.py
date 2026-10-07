@@ -101,11 +101,47 @@ class Chairman:
         return False, f"skor {total} < {self.THRESHOLD}", votes
 
 
+class PatternJudge:
+    """Peran 8 — Hakim Pola: VETO kombinasi strategi+regime yang di-ban Auditor
+    karena terbukti berdarah (auto-ban dari learn.py, kedaluwarsa otomatis)."""
+    name = "Hakim Pola"
+
+    def vote(self, sig, df, ctx):
+        if sig is None:
+            return Vote(self.name, 0.0, "-")
+        broker = ctx.get("broker")
+        if broker is None:
+            return Vote(self.name, 0.0, "-")
+        reason = broker.is_banned(sig.strategy, sig.regime)
+        if reason:
+            return Vote(self.name, -1.0, f"di-ban Auditor: {reason}", veto=True)
+        return Vote(self.name, 0.1, "pola bersih")
+
+
+class NewsGuard:
+    """Peran 9 — Penjaga Berita: VETO entry di sekitar news high-impact
+    (NFP, CPI, suku bunga). Kalender gagal dibaca -> fail-open, tetap voting netral."""
+    name = "Penjaga Berita"
+
+    def vote(self, sig, df, ctx):
+        if sig is None:
+            return Vote(self.name, 0.0, "-")
+        try:
+            from news import blackout
+            hit, title = blackout()
+        except Exception:
+            return Vote(self.name, 0.0, "kalender tak tersedia")
+        if hit:
+            return Vote(self.name, -1.0, f"blackout: {title}", veto=True)
+        return Vote(self.name, 0.1, "tidak ada news besar")
+
+
 class Council:
     """Dewan lengkap: 6 peran voting + 1 ketua."""
     def __init__(self):
         self.roles = [TechnicalAnalyst(), SessionExpert(), VolatilityGuard(),
-                      ExhaustionDetector(), MLValidator(), RiskManagerRole()]
+                      ExhaustionDetector(), MLValidator(), RiskManagerRole(),
+                      PatternJudge(), NewsGuard()]
         self.chairman = Chairman()
 
     def decide(self, sig, df, ctx) -> tuple:

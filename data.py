@@ -15,7 +15,8 @@ try:
 except ImportError:
     _HAS_YF = False
 
-_DUKA_SYMBOL = {"EURUSD=X": "EUR/USD", "GBPUSD=X": "GBP/USD"}
+_DUKA_SYMBOL = {"EURUSD=X": "EUR/USD", "GBPUSD=X": "GBP/USD",
+                "USDJPY=X": "USD/JPY", "AUDUSD=X": "AUD/USD"}
 
 
 def _parse_period(period: str) -> datetime.timedelta:

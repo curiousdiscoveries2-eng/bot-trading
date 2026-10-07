@@ -74,11 +74,11 @@ def cycle():
         if any(p.symbol == sym for p in broker.positions):
             continue
         sig = generate_signal(df, sym, config.SL_ATR_MULT, config.TP_RR)
-        ctx = {"risk": risk, "ml": ml}
+        ctx = {"risk": risk, "ml": ml, "broker": broker}
         approved, reason, votes = council.decide(sig, df, ctx)
         if not approved:
             continue
-        size = risk.position_size(sig.entry, sig.stop)
+        size = risk.position_size(sig.entry, sig.stop, sym, sig.entry)
         if size <= 0:
             continue
         pos = broker.open(sig, size, config.SPREAD[sym], ts,

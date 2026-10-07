@@ -14,10 +14,11 @@ PROFILES = {
 RISK = PROFILES[RISK_PROFILE]
 
 # ---- Trading ----
-SYMBOLS = ["EURUSD=X", "GBPUSD=X"]   # pair XXXUSD -> P/L langsung dalam USD
+SYMBOLS = ["EURUSD=X", "GBPUSD=X", "USDJPY=X", "AUDUSD=X"]
 TIMEFRAME = "1h"
 START_BALANCE = 10000.0
-SPREAD = {"EURUSD=X": 0.00020, "GBPUSD=X": 0.00025}  # simulasi spread realistis
+SPREAD = {"EURUSD=X": 0.00020, "GBPUSD=X": 0.00025,
+          "USDJPY=X": 0.020, "AUDUSD=X": 0.00018}  # simulasi spread realistis
 SL_ATR_MULT = 1.5
 TP_RR = 2.0            # take profit = 2x risiko (risk:reward 1:2)
 LOOP_MINUTES = 15      # cek sinyal tiap 15 menit

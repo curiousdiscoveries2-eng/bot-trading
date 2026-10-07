@@ -6,6 +6,12 @@ import config
 API = f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}"
 
 
+def _px(symbol: str, v: float) -> str:
+    """Format harga: 3 desimal untuk JPY, 5 untuk lainnya."""
+    dec = 3 if "JPY" in symbol else 5
+    return f"{v:.{dec}f}"
+
+
 def send(msg: str):
     if not config.TELEGRAM_TOKEN or not config.TELEGRAM_CHAT_ID:
         print(f"[TG] {msg}")
@@ -21,7 +27,8 @@ def send(msg: str):
 def trade_opened(pos) -> str:
     d = "LONG" if pos.direction == 1 else "SHORT"
     return (f"🟢 OPEN {d} {pos.symbol}\n"
-            f"Entry: {pos.entry:.5f} | SL: {pos.stop:.5f} | TP: {pos.tp:.5f}\n"
+            f"Entry: {_px(pos.symbol, pos.entry)} | SL: {_px(pos.symbol, pos.stop)}"
+            f" | TP: {_px(pos.symbol, pos.tp)}\n"
             f"Size: {pos.size:,.0f} unit | Strategi: {pos.strategy}\n"
             f"💰 Saldo saat open: ${pos.balance_before:,.2f}")
 
@@ -33,6 +40,8 @@ def trade_closed(pnl: float, close_reason: str, pos, balance_after: float) -> st
                  "stop_loss": "stop loss 🛑",
                  "emergency": "emergency stop 🛑"}.get(close_reason, close_reason)
     risk_amt = abs(pos.entry - pos.stop) * pos.size
+    if pos.symbol.startswith("USD"):  # konversi risiko JPY -> USD
+        risk_amt /= pos.entry
     rmult = pnl / risk_amt if risk_amt > 0 else 0.0
     votes = f"\n{pos.council_votes}" if pos.council_votes else ""
     return (f"{hasil} — CLOSE {d} {pos.symbol}\n"
@@ -42,7 +51,8 @@ def trade_closed(pnl: float, close_reason: str, pos, balance_after: float) -> st
             f"🎯 Kenapa posisi ini dibuka:\n"
             f"• Strategi: {pos.strategy} | Dewan: {pos.council_reason}"
             f"{votes}\n\n"
-            f"Entry {pos.entry:.5f} | SL {pos.stop:.5f} | TP {pos.tp:.5f}\n"
+            f"Entry {_px(pos.symbol, pos.entry)} | SL {_px(pos.symbol, pos.stop)}"
+            f" | TP {_px(pos.symbol, pos.tp)}\n"
             f"Dibuka: {pos.open_time}")
 
 

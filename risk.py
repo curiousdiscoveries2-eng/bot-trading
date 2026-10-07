@@ -17,13 +17,18 @@ class RiskManager:
         self.cfg = cfg
         self.state = RiskState(start_balance, start_balance, 0.0, 0)
 
-    def position_size(self, entry: float, stop: float) -> float:
-        """Ukuran posisi (unit) dari % risiko per trade."""
+    def position_size(self, entry: float, stop: float, symbol: str = "",
+                      price: float = 0.0) -> float:
+        """Ukuran posisi (unit) dari % risiko per trade.
+        Pair USDXXX (mis. USDJPY): risiko dihitung dalam JPY -> konversi ke USD."""
         risk_amount = self.state.balance * self.cfg["risk_per_trade"]
         dist = abs(entry - stop)
         if dist <= 0:
             return 0.0
-        return risk_amount / dist
+        size = risk_amount / dist
+        if symbol.startswith("USD") and price > 0:
+            size *= price
+        return size
 
     def allow_new_trade(self) -> tuple:
         s, c = self.state, self.cfg

@@ -4,6 +4,15 @@ from dataclasses import dataclass
 import config
 
 
+def _pnl_usd(symbol: str, entry: float, exit_price: float, direction: int, size: float) -> float:
+    """P/L dalam USD. Pair XXXUSD: langsung. Pair USDXXX (mis. USDJPY):
+    P/L dalam mata uang quote -> konversi ke USD pakai harga exit."""
+    pnl = (exit_price - entry) * direction * size
+    if symbol.startswith("USD") and exit_price:
+        pnl /= exit_price
+    return pnl
+
+
 @dataclass
 class Position:
     id: int
@@ -45,6 +54,10 @@ class PaperBroker:
                 balance_before REAL, council_reason TEXT, council_votes TEXT)""")
             # state kecil bot (peak balance utk drawdown lintas-run)
             c.execute("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT)")
+            # daftar hitam Auditor: (strategi, regime) yang terbukti berdarah
+            c.execute("""CREATE TABLE IF NOT EXISTS bans(
+                strategy TEXT, regime TEXT, banned_until TEXT, reason TEXT,
+                PRIMARY KEY(strategy, regime))""")
 
     def _load_open(self):
         with sqlite3.connect(self.db_path) as c:
@@ -75,8 +88,7 @@ class PaperBroker:
         return pos
 
     def _close(self, pos: Position, exit_price: float, close_time: str, reason: str) -> float:
-        # pair XXXUSD: P/L = selisih harga x unit, langsung USD
-        pnl = (exit_price - pos.entry) * pos.direction * pos.size
+        pnl = _pnl_usd(pos.symbol, pos.entry, exit_price, pos.direction, pos.size)
         f = getattr(pos, "features", {}) or {}
         with sqlite3.connect(self.db_path) as c:
             c.execute("DELETE FROM open_positions WHERE id=?", (pos.id,))
@@ -156,3 +168,24 @@ class PaperBroker:
             c.execute("INSERT INTO meta(key,value) VALUES(?,?) "
                       "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                       (key, str(value)))
+
+    # ---- daftar hitam Auditor ----
+    def add_ban(self, strategy: str, regime: str, days: int, reason: str):
+        import datetime
+        until = (datetime.datetime.now(datetime.timezone.utc)
+                 + datetime.timedelta(days=days)).isoformat()
+        with sqlite3.connect(self.db_path) as c:
+            c.execute("INSERT INTO bans VALUES(?,?,?,?) "
+                      "ON CONFLICT(strategy,regime) DO UPDATE SET "
+                      "banned_until=excluded.banned_until, reason=excluded.reason",
+                      (strategy, regime, until, reason))
+
+    def is_banned(self, strategy: str, regime: str):
+        """Kembalikan alasan ban jika (strategi, regime) masih di-ban, else None."""
+        import datetime
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with sqlite3.connect(self.db_path) as c:
+            row = c.execute("SELECT reason, banned_until FROM bans "
+                            "WHERE strategy=? AND regime=? AND banned_until>?",
+                            (strategy, regime, now)).fetchone()
+        return f"{row[0]} (s/d {row[1][:10]})" if row else None
