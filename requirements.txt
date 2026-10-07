@@ -1,0 +1,8 @@
+dukascopy-python
+yfinance
+pandas
+numpy
+scikit-learn
+flask
+requests
+matplotlib

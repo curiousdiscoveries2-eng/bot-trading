@@ -1,0 +1,18 @@
+[Unit]
+Description=Bot Autotrading Forex
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/autotrading
+Environment="TELEGRAM_TOKEN=ISI_TOKEN_BOT"
+Environment="TELEGRAM_CHAT_ID=ISI_CHAT_ID"
+Environment="BOT_RISK_PROFILE=sedang"
+ExecStart=/home/ubuntu/autotrading/venv/bin/python /home/ubuntu/autotrading/run.py
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target
